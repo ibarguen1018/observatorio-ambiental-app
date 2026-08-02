@@ -52,12 +52,14 @@
   .site-header-inner{ display:flex; align-items:center; justify-content:space-between; gap:16px; }
   .brand{ display:flex; align-items:center; gap:12px; }
   .brand-mark{
-    width:38px; height:38px; border-radius:10px;
-    background:linear-gradient(135deg, var(--amber-500), var(--teal-500));
+    width:48px; height:48px; border-radius:12px;
+    background:#fff;
     display:flex; align-items:center; justify-content:center;
     flex-shrink:0;
+    padding:2px;
+    box-shadow:0 0 0 1px rgba(242,166,90,.4), 0 2px 8px rgba(0,0,0,.35);
   }
-  .brand-mark svg{ width:20px; height:20px; }
+  .brand-mark img{ width:100%; height:100%; object-fit:contain; filter:saturate(1.5) contrast(1.08); }
   .brand-text{ display:flex; flex-direction:column; line-height:1.15; }
   .brand-text strong{ font-family:var(--font-display); font-size:17px; font-weight:600; letter-spacing:.2px; }
   .brand-text span{ font-size:12px; color:var(--amber-300); font-family:var(--font-mono); letter-spacing:.5px; }
@@ -195,8 +197,26 @@
     background:var(--teal-900); color:rgba(255,255,255,.6);
     padding:28px 0; font-size:12.5px;
   }
-  footer .wrap{ display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+  footer .wrap{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
   footer strong{ color:#fff; }
+  footer .foot-links{ display:flex; flex-direction:column; gap:4px; }
+
+  .alcaldia-badge{
+    display:inline-flex; align-items:center; gap:9px;
+    background:#fff; border-radius:4px; padding:6px 12px 6px 8px;
+    box-shadow:0 1px 3px rgba(0,0,0,.25);
+  }
+  .alcaldia-badge img{ width:34px; height:34px; flex-shrink:0; }
+  .alcaldia-badge .divider{ width:1px; align-self:stretch; background:#c9c9c9; }
+  .alcaldia-badge .badge-text{ display:flex; flex-direction:column; line-height:1.12; }
+  .alcaldia-badge .badge-eyebrow{
+    font-family:var(--font-body); font-size:10.5px; font-weight:500;
+    color:#3a3a3a; letter-spacing:.2px;
+  }
+  .alcaldia-badge .badge-title{
+    font-family:var(--font-body); font-size:13.5px; font-weight:800;
+    color:#111; letter-spacing:.1px;
+  }
 
   @media (max-width:820px){
     .hero-grid{ grid-template-columns:1fr; }
@@ -221,7 +241,7 @@
   <div class="wrap site-header-inner">
     <div class="brand">
       <div class="brand-mark">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M12 3l7 4v10l-7 4-7-4V7l7-4z" stroke="#0B3B39" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        <img src="assets/escudo-cali.svg" alt="Escudo de Santiago de Cali">
       </div>
       <div class="brand-text">
         <strong>Observatorio Ambiental</strong>
@@ -395,8 +415,19 @@
 
 <footer>
   <div class="wrap">
-    <span><strong>Observatorio Ambiental</strong> · Santiago de Cali — DAGMA</span>
-    <span>Prototipo de rediseño · no es un sitio oficial</span>
+    <div class="alcaldia-badge">
+      <img src="assets/escudo-cali.svg" alt="Escudo de Santiago de Cali">
+      <div class="divider" aria-hidden="true"></div>
+      <div class="badge-text">
+        <span class="badge-eyebrow">ALCALDÍA DE</span>
+        <strong class="badge-title">SANTIAGO DE CALI</strong>
+      </div>
+    </div>
+    <div class="foot-links">
+      <span><strong>Observatorio Ambiental</strong> · Santiago de Cali — DAGMA</span>
+      <span>Prototipo de rediseño · no es un sitio oficial</span>
+      <span>Escudo de Santiago de Cali: Milenioscuro / Wikimedia Commons (CC BY-SA 4.0)</span>
+    </div>
   </div>
 </footer>
 
@@ -406,29 +437,54 @@
 </div>
 
 <script>
-  // Share the current page URL: native share sheet on mobile, clipboard copy as fallback.
+  /**
+   * Módulo de "Compartir enlace".
+   * Usa la Web Share API nativa cuando está disponible (móviles/algunos navegadores
+   * de escritorio) y cae en copiar al portapapeles como alternativa universal.
+   * Se envuelve en un IIFE para no filtrar variables al scope global.
+   */
   (function(){
-    const btn = document.getElementById('btn-share');
-    const toast = document.getElementById('toast');
-    const toastMsg = document.getElementById('toast-msg');
-    let toastTimer = null;
+    // Referencias a los elementos del DOM que usa este módulo.
+    const btn = document.getElementById('btn-share');       // Botón "Compartir enlace"
+    const toast = document.getElementById('toast');         // Contenedor visual del aviso flotante
+    const toastMsg = document.getElementById('toast-msg');  // Texto que se muestra dentro del toast
+    let toastTimer = null; // Guarda el temporizador activo para poder cancelarlo si se reactiva el toast
 
+    /**
+     * Muestra un mensaje flotante (toast) en la parte inferior de la pantalla.
+     * Si ya hay un toast visible, reinicia su temporizador de auto-ocultado.
+     * @param {string} msg - Texto a mostrar dentro del toast.
+     */
     function showToast(msg){
       toastMsg.textContent = msg;
       toast.classList.add('show');
-      clearTimeout(toastTimer);
+      clearTimeout(toastTimer); // evita que un toast anterior lo oculte antes de tiempo
       toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
     }
 
+    /**
+     * Copia una URL al portapapeles del sistema y notifica al usuario con un toast.
+     * Si el navegador bloquea o no soporta la Clipboard API, recurre a un
+     * `prompt()` para que el usuario pueda copiar el enlace manualmente.
+     * @param {string} url - Enlace a copiar.
+     * @returns {Promise<void>}
+     */
     async function copyLink(url){
       try{
         await navigator.clipboard.writeText(url);
         showToast('Enlace copiado al portapapeles');
       }catch(err){
+        // Fallback para navegadores sin permiso/soporte de Clipboard API
         window.prompt('Copia este enlace para compartirlo:', url);
       }
     }
 
+    /**
+     * Manejador de clic del botón "Compartir enlace".
+     * Intenta abrir el panel nativo para compartir (navigator.share); si no
+     * existe en el navegador, o el usuario lo cancela con error, se hace
+     * copyLink() como alternativa.
+     */
     btn.addEventListener('click', async () => {
       const shareData = {
         title: document.title,
@@ -439,6 +495,7 @@
         try{
           await navigator.share(shareData);
         }catch(err){
+          // AbortError = el usuario cerró el panel de compartir a propósito, no es un fallo real
           if(err.name !== 'AbortError') copyLink(shareData.url);
         }
       }else{
@@ -449,13 +506,26 @@
 </script>
 
 <script>
-  // Live-readout simulation (respects reduced motion by simply not looping)
+  /**
+   * Simulación de lectura en vivo de la estación de monitoreo (hero section).
+   * Genera valores aleatorios de PM2.5, ruido y temperatura cada 3 segundos
+   * para dar sensación de "datos en tiempo real" en este prototipo.
+   * No hace ninguna petición real a un backend/API.
+   *
+   * Respeta la preferencia de accesibilidad `prefers-reduced-motion`: si el
+   * usuario la tiene activada, el intervalo simplemente no se inicia y los
+   * valores iniciales del HTML quedan estáticos.
+   */
   const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if(!prefersReduced){
-    const pm = document.getElementById('v-pm');
-    const db = document.getElementById('v-db');
-    const temp = document.getElementById('v-temp');
+    // Elementos donde se inyectan los valores simulados.
+    const pm = document.getElementById('v-pm');     // Calidad del aire (PM2.5)
+    const db = document.getElementById('v-db');     // Nivel de ruido
+    const temp = document.getElementById('v-temp'); // Temperatura
+
     setInterval(() => {
+      // Rangos arbitrarios elegidos para que los valores se vean realistas:
+      // PM2.5 entre 12 y 18 µg/m³, ruido entre 54 y 62 dB, temp entre 23 y 26 °C.
       const pmVal = (12 + Math.random()*6).toFixed(0);
       const dbVal = (54 + Math.random()*8).toFixed(0);
       const tempVal = (23 + Math.random()*3).toFixed(0);

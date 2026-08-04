@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
   :root{
     --teal-900:#0B3B39;
@@ -135,7 +136,96 @@
   .readout-label{ font-size:13px; color:rgba(255,255,255,.65); }
   .readout-value{ font-family:var(--font-mono); font-size:19px; font-weight:500; }
   .readout-unit{ font-size:12px; color:var(--amber-300); margin-left:4px; }
-  .readout-foot{ margin-top:14px; font-size:11.5px; color:rgba(255,255,255,.45); }
+  .readout-foot{ margin-top:14px; font-size:11.5px; color:rgba(255,255,255,.45); display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+  .readout-foot button{
+    font-family:var(--font-mono); font-size:11px; color:var(--amber-300);
+    background:none; border:none; cursor:pointer; padding:0; text-decoration:underline;
+  }
+  .readout-foot button:hover{ color:var(--amber-500); }
+
+  /* ---------- Status palette (fixed, never themed — always paired with icon+label) ---------- */
+  :root{
+    --status-good:#0ca30c;
+    --status-warning:#fab219;
+    --status-serious:#ec835a;
+    --status-critical:#d03b3b;
+    --status-unknown:#8a8a8a;
+  }
+  .status-badge{
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:var(--font-mono); font-size:11.5px; font-weight:500;
+    padding:4px 10px 4px 8px; border-radius:999px;
+    background:var(--bg); border:1px solid var(--line);
+  }
+  .status-badge .dot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .status-badge.good .dot{ background:var(--status-good); }
+  .status-badge.warning .dot{ background:var(--status-warning); }
+  .status-badge.serious .dot{ background:var(--status-serious); }
+  .status-badge.critical .dot{ background:var(--status-critical); }
+  .status-badge.unknown .dot{ background:var(--status-unknown); }
+
+  /* ---------- Mapa en vivo ---------- */
+  .comuna-filter{
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    margin-bottom:20px; padding:12px 16px;
+    background:var(--card-bg); border:1px solid var(--line); border-radius:12px;
+  }
+  .comuna-filter label{ font-size:13px; font-weight:600; color:var(--ink); }
+  .comuna-filter select{
+    font-family:var(--font-body); font-size:13.5px; color:var(--ink);
+    background:var(--bg); border:1px solid var(--line); border-radius:8px;
+    padding:8px 10px; cursor:pointer;
+  }
+  .comuna-status{ font-size:12.5px; color:var(--ink-soft); }
+  .comuna-status.ok{ color:var(--status-good); font-weight:500; }
+  .comuna-status.missing{ color:#8a6d00; font-weight:500; }
+
+  .map-layout{ display:grid; grid-template-columns:1.5fr 1fr; gap:24px; align-items:start; }
+  .map-panel{ position:relative; }
+  #map-canvas{
+    height:440px; width:100%; border-radius:var(--radius);
+    border:1px solid var(--line); background:var(--line);
+  }
+  .leaflet-popup-content-wrapper{ border-radius:12px; font-family:var(--font-body); }
+  .leaflet-popup-content{ margin:12px 14px; min-width:200px; }
+  .popup-title{ font-family:var(--font-display); font-weight:600; font-size:14px; margin:0 0 2px; color:var(--ink); }
+  .popup-sub{ font-size:11.5px; color:var(--ink-soft); margin:0 0 8px; }
+  .popup-stats{ display:grid; grid-template-columns:1fr 1fr; gap:6px 10px; font-size:12.5px; margin-bottom:8px; }
+  .popup-stats b{ font-family:var(--font-mono); }
+  .map-legend{
+    display:flex; gap:16px; flex-wrap:wrap; margin-top:12px;
+    font-size:12px; color:var(--ink-soft);
+  }
+  .map-legend .status-badge{ background:var(--card-bg); }
+  .map-loading{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(245,247,243,.85); border-radius:var(--radius);
+    font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);
+    transition:opacity .2s ease; z-index:400;
+  }
+  .map-loading.hidden{ opacity:0; pointer-events:none; }
+
+  .station-list{ display:flex; flex-direction:column; gap:12px; }
+  .station-card{
+    background:var(--card-bg); border:1px solid var(--line); border-radius:14px;
+    padding:14px 16px; transition:box-shadow .3s ease, border-color .3s ease;
+  }
+  .station-card.highlight{ border-color:var(--teal-500); box-shadow:0 0 0 3px rgba(46,139,119,.18); }
+  .station-card-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:2px; }
+  .station-card-head strong{ font-family:var(--font-display); font-size:14.5px; }
+  .station-meta{ font-size:12px; color:var(--ink-soft); margin-bottom:10px; }
+  .station-stats{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px 14px; }
+  .stat-mini{ display:flex; flex-direction:column; }
+  .stat-mini .stat-label{ font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.4px; }
+  .stat-mini .stat-value{ font-family:var(--font-mono); font-size:15px; font-weight:500; }
+  .skeleton{ display:inline-block; width:34px; height:13px; background:var(--line); border-radius:4px; animation:skeleton-pulse 1.2s ease-in-out infinite; }
+  @keyframes skeleton-pulse{ 0%,100%{ opacity:.5; } 50%{ opacity:1; } }
+
+  .data-source-note{
+    margin-top:20px; background:var(--card-bg); border:1px solid var(--line); border-left:3px solid var(--teal-500);
+    border-radius:10px; padding:14px 18px; font-size:13px; color:var(--ink-soft);
+  }
+  .data-source-note strong{ color:var(--ink); }
 
   /* ---------- Section shared ---------- */
   section{ padding:56px 0; }
@@ -153,10 +243,10 @@
   .cat-card{
     display:flex; flex-direction:column; align-items:center;
     text-align:center; text-decoration:none; color:var(--ink);
-    padding:8px; border-radius:16px;
-    transition:transform .18s ease;
+    padding:8px; border-radius:16px; border:none; background:none; font:inherit;
+    cursor:pointer; transition:transform .18s ease;
   }
-  .cat-card:hover{ transform:translateY(-4px); }
+  .cat-card:hover, .cat-card:focus-visible{ transform:translateY(-4px); }
   .hex{
     width:112px; aspect-ratio:1/.92;
     clip-path:polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
@@ -165,13 +255,33 @@
     box-shadow:0 6px 18px -6px rgba(11,59,57,.35);
     position:relative;
   }
-  .cat-card:hover .hex{ box-shadow:0 10px 24px -6px rgba(11,59,57,.5); }
+  .cat-card:hover .hex, .cat-card:focus-visible .hex{ box-shadow:0 10px 24px -6px rgba(11,59,57,.5); }
+  .cat-card.active .hex{ box-shadow:0 0 0 3px var(--amber-500), 0 10px 24px -6px rgba(11,59,57,.5); }
+  .cat-card.active .cat-label{ color:var(--teal-700); }
   .hex svg{ width:46%; height:46%; }
   .cat-label{
     margin-top:12px; font-family:var(--font-body); font-weight:600;
     font-size:13.5px; letter-spacing:.3px; text-transform:uppercase; color:var(--ink);
   }
   .cat-sub{ margin-top:2px; font-size:12px; color:var(--ink-soft); }
+
+  .cat-info{
+    margin-top:32px; display:flex; gap:18px; align-items:flex-start;
+    background:var(--card-bg); border:1px solid var(--line); border-radius:var(--radius);
+    padding:20px 24px;
+  }
+  .cat-info-icon{
+    width:48px; height:48px; border-radius:12px; flex-shrink:0;
+    background:var(--bg); display:flex; align-items:center; justify-content:center;
+  }
+  .cat-info-icon svg{ width:28px; height:28px; }
+  .cat-info-body strong{ display:block; font-family:var(--font-display); font-size:16px; margin-bottom:4px; }
+  .cat-info-body p{ margin:0; font-size:13.5px; color:var(--ink-soft); max-width:64ch; }
+  .cat-info-indicators{ list-style:none; display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 0; padding:0; }
+  .cat-info-indicators li{
+    font-family:var(--font-mono); font-size:11.5px; color:var(--teal-700);
+    background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:4px 10px;
+  }
 
   /* ---------- Institutional links (deliberately different treatment) ---------- */
   .link-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
@@ -222,11 +332,14 @@
     .hero-grid{ grid-template-columns:1fr; }
     .cat-grid{ grid-template-columns:repeat(2, 1fr); }
     .link-grid{ grid-template-columns:1fr; }
+    .map-layout{ grid-template-columns:1fr; }
+    #map-canvas{ height:340px; }
     nav.site-nav{ display:none; }
   }
   @media (max-width:480px){
     .cat-grid{ grid-template-columns:repeat(2, 1fr); gap:22px 14px; }
     .hex{ width:92px; }
+    .cat-info{ flex-direction:column; }
   }
 
   @media (prefers-reduced-motion: reduce){
@@ -249,9 +362,9 @@
       </div>
     </div>
     <nav class="site-nav">
+      <a href="#mapa">Mapa en vivo</a>
       <a href="#categorias">Categorías</a>
       <a href="#enlaces">Enlaces</a>
-      <a href="#">Indicadores</a>
       <a href="#">Contacto</a>
     </nav>
   </div>
@@ -275,24 +388,70 @@
 
     <div class="readout" aria-live="polite">
       <div class="readout-head">
-        <span>Estación Comuna 22 · en vivo</span>
+        <span>Estación Comuna 22 (OAC22) · en vivo</span>
         <span class="live-dot" aria-hidden="true"></span>
       </div>
       <div class="readout-rows">
         <div class="readout-row">
           <span class="readout-label">Calidad del aire (PM2.5)</span>
-          <span class="readout-value" id="v-pm">14<span class="readout-unit">µg/m³</span></span>
+          <span class="readout-value" id="v-pm"><span class="skeleton"></span></span>
         </div>
         <div class="readout-row">
-          <span class="readout-label">Nivel de ruido</span>
-          <span class="readout-value" id="v-db">58<span class="readout-unit">dB</span></span>
+          <span class="readout-label">Índice de calidad del aire</span>
+          <span class="readout-value" id="v-aqi"><span class="skeleton"></span></span>
         </div>
         <div class="readout-row">
           <span class="readout-label">Temperatura</span>
-          <span class="readout-value" id="v-temp">24<span class="readout-unit">°C</span></span>
+          <span class="readout-value" id="v-temp"><span class="skeleton"></span></span>
+        </div>
+        <div class="readout-row">
+          <span class="readout-label">Humedad relativa</span>
+          <span class="readout-value" id="v-hum"><span class="skeleton"></span></span>
         </div>
       </div>
-      <p class="readout-foot">Datos simulados para este prototipo · actualiza cada 3s</p>
+      <p class="readout-foot">
+        <span id="v-updated">Conectando a datos en vivo…</span>
+        <button type="button" id="btn-refresh-hero">Actualizar</button>
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="mapa">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <p class="section-tag">Red de monitoreo · datos en vivo</p>
+        <h2>Mapa de estaciones</h2>
+        <p>Estación oficial de DAGMA y observatorios comunitarios tipo Davis, con mediciones en vivo de calidad del aire y clima obtenidas por API REST — no son valores simulados.</p>
+      </div>
+    </div>
+
+    <div class="comuna-filter">
+      <label for="comuna-select">Comuna a observar</label>
+      <select id="comuna-select"></select>
+      <span class="comuna-status" id="comuna-status"></span>
+    </div>
+
+    <div class="map-layout">
+      <div class="map-panel">
+        <div id="map-canvas" role="img" aria-label="Mapa de Santiago de Cali con las estaciones de monitoreo ambiental"></div>
+        <div class="map-loading" id="map-loading">Cargando datos en vivo de las 4 estaciones…</div>
+        <div class="map-legend" aria-hidden="false">
+          <span class="status-badge good"><span class="dot"></span>Buena</span>
+          <span class="status-badge warning"><span class="dot"></span>Moderada</span>
+          <span class="status-badge serious"><span class="dot"></span>Dañina (sensibles)</span>
+          <span class="status-badge critical"><span class="dot"></span>Dañina</span>
+        </div>
+      </div>
+
+      <div class="station-list" id="station-list">
+        <!-- Las tarjetas de estación se generan dinámicamente en JS a partir del GeoJSON de estaciones -->
+      </div>
+    </div>
+
+    <div class="data-source-note">
+      <strong>Interoperabilidad de datos:</strong> las 4 estaciones se modelan como una capa <strong>GeoJSON</strong> y las mediciones (PM2.5, PM10, ozono, NO₂, AQI, temperatura, humedad) se consultan en vivo contra la <strong>API REST pública de Open-Meteo</strong> (aire: Copernicus CAMS; clima: modelos meteorológicos), sin necesidad de clave. El mapa base usa teselas OpenStreetMap. Cuando DAGMA y los observatorios comunitarios publiquen sus propios servicios OGC (WMS/WFS) y feeds IoT de sus estaciones Davis, estas capas simuladas por geolocalización se reemplazan por las oficiales sin cambiar la interfaz. El ruido ambiental queda pendiente de integración: hoy no existe una API pública de sensores acústicos para Cali.
     </div>
   </div>
 </section>
@@ -309,7 +468,7 @@
 
     <div class="cat-grid">
 
-      <a class="cat-card" href="#" aria-label="Agua">
+      <button type="button" class="cat-card" data-category="agua" aria-label="Agua">
         <div class="hex">
           <svg viewBox="0 0 48 48" fill="none">
             <path d="M24 6c-6 8-10 13.5-10 19a10 10 0 0020 0c0-5.5-4-11-10-19z" fill="#F2A65A"/>
@@ -318,9 +477,9 @@
         </div>
         <span class="cat-label">Agua</span>
         <span class="cat-sub">Calidad hídrica</span>
-      </a>
+      </button>
 
-      <a class="cat-card" href="#" aria-label="Aire">
+      <button type="button" class="cat-card" data-category="aire" aria-label="Aire">
         <div class="hex">
           <svg viewBox="0 0 48 48" fill="none">
             <path d="M8 18h22a6 6 0 100-6" stroke="#F2A65A" stroke-width="2.6" stroke-linecap="round"/>
@@ -329,9 +488,9 @@
         </div>
         <span class="cat-label">Aire</span>
         <span class="cat-sub">Calidad y emisiones</span>
-      </a>
+      </button>
 
-      <a class="cat-card" href="#" aria-label="Ruido">
+      <button type="button" class="cat-card" data-category="ruido" aria-label="Ruido">
         <div class="hex">
           <svg viewBox="0 0 48 48" fill="none">
             <circle cx="14" cy="24" r="4" fill="#F2A65A"/>
@@ -340,9 +499,9 @@
         </div>
         <span class="cat-label">Ruido</span>
         <span class="cat-sub">Ruido ambiental</span>
-      </a>
+      </button>
 
-      <a class="cat-card" href="#" aria-label="Flora">
+      <button type="button" class="cat-card" data-category="flora" aria-label="Flora">
         <div class="hex">
           <svg viewBox="0 0 48 48" fill="none">
             <path d="M24 40V20" stroke="#F2A65A" stroke-width="2.6" stroke-linecap="round"/>
@@ -351,9 +510,9 @@
         </div>
         <span class="cat-label">Flora</span>
         <span class="cat-sub">Cobertura vegetal</span>
-      </a>
+      </button>
 
-      <a class="cat-card" href="#" aria-label="Fauna">
+      <button type="button" class="cat-card" data-category="fauna" aria-label="Fauna">
         <div class="hex">
           <svg viewBox="0 0 48 48" fill="none">
             <path d="M10 28c4-10 12-14 20-12 6 1.5 8 6 8 6s-3-1-5 1c3 1 4 3 4 3s-6 2-9-1c-1 4-6 8-13 6 2-1 3-3 3-5-4 1-7-1-8 2z" fill="#F2A65A"/>
@@ -361,9 +520,9 @@
         </div>
         <span class="cat-label">Fauna</span>
         <span class="cat-sub">Especies urbanas</span>
-      </a>
+      </button>
 
-      <a class="cat-card" href="#" aria-label="Residuos sólidos">
+      <button type="button" class="cat-card" data-category="residuos" aria-label="Residuos sólidos">
         <div class="hex">
           <svg viewBox="0 0 48 48" fill="none">
             <path d="M24 6l4 4-4 4M28 10H16a6 6 0 00-6 6M24 42l-4-4 4-4M20 38h12a6 6 0 006-6" stroke="#F2A65A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
@@ -371,8 +530,19 @@
         </div>
         <span class="cat-label">Residuos sólidos</span>
         <span class="cat-sub">Gestión y reciclaje</span>
-      </a>
+      </button>
 
+    </div>
+
+    <div class="cat-info" id="cat-info" aria-live="polite">
+      <div class="cat-info-icon" id="cat-info-icon" aria-hidden="true">
+        <svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="19" stroke="#2E8B77" stroke-width="2.4" stroke-dasharray="4 5"/></svg>
+      </div>
+      <div class="cat-info-body">
+        <strong id="cat-info-title">Explora una categoría</strong>
+        <p id="cat-info-desc">Pasa el cursor (o toca, en móvil) sobre un ícono para ver qué mide el Observatorio en esa categoría. Haz clic para dejarla fija.</p>
+        <ul class="cat-info-indicators" id="cat-info-indicators"></ul>
+      </div>
     </div>
   </div>
 </section>
@@ -435,6 +605,8 @@
   <svg viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
   <span id="toast-msg">Enlace copiado al portapapeles</span>
 </div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
 <script>
   /**
@@ -507,33 +679,324 @@
 
 <script>
   /**
-   * Simulación de lectura en vivo de la estación de monitoreo (hero section).
-   * Genera valores aleatorios de PM2.5, ruido y temperatura cada 3 segundos
-   * para dar sensación de "datos en tiempo real" en este prototipo.
-   * No hace ninguna petición real a un backend/API.
+   * Red de monitoreo en vivo: mapa + panel del hero.
    *
-   * Respeta la preferencia de accesibilidad `prefers-reduced-motion`: si el
-   * usuario la tiene activada, el intervalo simplemente no se inicia y los
-   * valores iniciales del HTML quedan estáticos.
+   * Reemplaza los valores aleatorios del prototipo original por datos reales
+   * consultados en vivo vía API REST pública (sin clave):
+   *  - Aire (PM2.5, PM10, ozono, NO2, AQI): Open-Meteo Air Quality API
+   *    (https://air-quality-api.open-meteo.com) — modelos Copernicus CAMS.
+   *  - Clima (temperatura, humedad, viento): Open-Meteo Forecast API
+   *    (https://api.open-meteo.com).
+   * Las 4 estaciones se modelan como un FeatureCollection GeoJSON con
+   * coordenadas reales dentro de Santiago de Cali (DAGMA/CAM + 3 comunas).
    */
-  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if(!prefersReduced){
-    // Elementos donde se inyectan los valores simulados.
-    const pm = document.getElementById('v-pm');     // Calidad del aire (PM2.5)
-    const db = document.getElementById('v-db');     // Nivel de ruido
-    const temp = document.getElementById('v-temp'); // Temperatura
 
-    setInterval(() => {
-      // Rangos arbitrarios elegidos para que los valores se vean realistas:
-      // PM2.5 entre 12 y 18 µg/m³, ruido entre 54 y 62 dB, temp entre 23 y 26 °C.
-      const pmVal = (12 + Math.random()*6).toFixed(0);
-      const dbVal = (54 + Math.random()*8).toFixed(0);
-      const tempVal = (23 + Math.random()*3).toFixed(0);
-      pm.innerHTML = pmVal + '<span class="readout-unit">µg/m³</span>';
-      db.innerHTML = dbVal + '<span class="readout-unit">dB</span>';
-      temp.innerHTML = tempVal + '<span class="readout-unit">°C</span>';
-    }, 3000);
+  const STATIONS_GEOJSON = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: {
+          id: 'dagma-cam',
+          nombre: 'DAGMA · Estación oficial CAM',
+          tipo: 'Oficial DAGMA',
+          comuna: 'Comuna 3 · Centro (CAM)',
+          heroLabel: false
+        },
+        geometry: { type: 'Point', coordinates: [-76.5326, 3.4548] }
+      },
+      {
+        type: 'Feature',
+        properties: {
+          id: 'oac22',
+          nombre: 'OAC22 · Observatorio Comuna 22',
+          tipo: 'Comunitaria (tipo Davis)',
+          comuna: 'Comuna 22 · Ciudad Jardín / Pance',
+          heroLabel: true
+        },
+        geometry: { type: 'Point', coordinates: [-76.5330, 3.3705] }
+      },
+      {
+        type: 'Feature',
+        properties: {
+          id: 'comuna18',
+          nombre: 'Observatorio Comuna 18',
+          tipo: 'Comunitaria (tipo Davis)',
+          comuna: 'Comuna 18 · ladera / Meléndez',
+          heroLabel: false
+        },
+        geometry: { type: 'Point', coordinates: [-76.5480, 3.3745] }
+      },
+      {
+        type: 'Feature',
+        properties: {
+          id: 'comuna1',
+          nombre: 'Observatorio Comuna 1',
+          tipo: 'Comunitaria (tipo Davis)',
+          comuna: 'Comuna 1 · ladera noroccidente',
+          heroLabel: false
+        },
+        geometry: { type: 'Point', coordinates: [-76.5550, 3.4700] }
+      }
+    ]
+  };
+
+  const REFRESH_MS = 5 * 60 * 1000; // Open-Meteo actualiza por hora/15min; 5 min es suficiente y respeta el servicio gratuito.
+
+  /** Clasifica un AQI (escala US AQI) en el estado fijo good/warning/serious/critical. */
+  function aqiStatus(aqi){
+    if(aqi == null || Number.isNaN(aqi)) return { cls:'unknown', label:'Sin dato' };
+    if(aqi <= 50) return { cls:'good', label:'Buena' };
+    if(aqi <= 100) return { cls:'warning', label:'Moderada' };
+    if(aqi <= 150) return { cls:'serious', label:'Dañina (sensibles)' };
+    return { cls:'critical', label:'Dañina' };
   }
+
+  function statusBadgeHTML(status){
+    return `<span class="status-badge ${status.cls}"><span class="dot"></span>${status.label}</span>`;
+  }
+
+  /** Consulta aire + clima en vivo para una coordenada. Lanza si alguna petición falla. */
+  async function fetchStationData(lat, lon){
+    const airUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=pm2_5,pm10,ozone,nitrogen_dioxide,us_aqi&timezone=auto`;
+    const wxUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m&timezone=auto`;
+    const [airRes, wxRes] = await Promise.all([fetch(airUrl), fetch(wxUrl)]);
+    if(!airRes.ok || !wxRes.ok) throw new Error('Open-Meteo request failed');
+    const air = await airRes.json();
+    const wx = await wxRes.json();
+    return {
+      pm25: air.current.pm2_5,
+      pm10: air.current.pm10,
+      ozono: air.current.ozone,
+      no2: air.current.nitrogen_dioxide,
+      aqi: air.current.us_aqi,
+      temp: wx.current.temperature_2m,
+      humedad: wx.current.relative_humidity_2m,
+      viento: wx.current.wind_speed_10m,
+      hora: air.current.time
+    };
+  }
+
+  function fmtTime(iso){
+    if(!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit' });
+  }
+
+  /* ---------- Panel del hero (estación OAC22) ---------- */
+  const heroStation = STATIONS_GEOJSON.features.find(f => f.properties.heroLabel);
+  const elPm = document.getElementById('v-pm');
+  const elAqi = document.getElementById('v-aqi');
+  const elTemp = document.getElementById('v-temp');
+  const elHum = document.getElementById('v-hum');
+  const elUpdated = document.getElementById('v-updated');
+  const btnRefreshHero = document.getElementById('btn-refresh-hero');
+
+  async function refreshHero(){
+    elUpdated.textContent = 'Actualizando…';
+    try{
+      const [lon, lat] = heroStation.geometry.coordinates;
+      const d = await fetchStationData(lat, lon);
+      elPm.innerHTML = Math.round(d.pm25) + '<span class="readout-unit">µg/m³</span>';
+      const status = aqiStatus(d.aqi);
+      elAqi.innerHTML = Math.round(d.aqi) + '<span class="readout-unit">' + status.label + '</span>';
+      elTemp.innerHTML = Math.round(d.temp) + '<span class="readout-unit">°C</span>';
+      elHum.innerHTML = Math.round(d.humedad) + '<span class="readout-unit">%</span>';
+      elUpdated.textContent = 'Datos en vivo (Open-Meteo API) · ' + fmtTime(d.hora);
+    }catch(err){
+      elUpdated.textContent = 'No se pudo conectar a la API en vivo. Reintenta con "Actualizar".';
+    }
+  }
+
+  btnRefreshHero.addEventListener('click', refreshHero);
+  refreshHero();
+  setInterval(refreshHero, REFRESH_MS);
+
+  /* ---------- Mapa + lista de estaciones ---------- */
+  const mapLoading = document.getElementById('map-loading');
+  const stationListEl = document.getElementById('station-list');
+  const markersById = {};
+
+  const map = L.map('map-canvas', { scrollWheelZoom:false }).setView([3.4372, -76.5225], 11.3);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 18
+  }).addTo(map);
+
+  const stationLayer = L.geoJSON(STATIONS_GEOJSON, {
+    pointToLayer: (feature, latlng) => {
+      const marker = L.circleMarker(latlng, {
+        radius: 10,
+        weight: 2,
+        color: '#fff',
+        fillColor: '#8a8a8a',
+        fillOpacity: 0.9
+      });
+      marker.bindPopup(`<p class="popup-title">${feature.properties.nombre}</p><p class="popup-sub">Cargando datos en vivo…</p>`);
+      markersById[feature.properties.id] = marker;
+      return marker;
+    }
+  }).addTo(map);
+
+  function renderStationCard(props, data, error){
+    const status = data ? aqiStatus(data.aqi) : { cls:'unknown', label:'Sin dato' };
+    const statsHTML = data ? `
+      <div class="station-stats">
+        <div class="stat-mini"><span class="stat-label">PM2.5</span><span class="stat-value">${Math.round(data.pm25)} µg/m³</span></div>
+        <div class="stat-mini"><span class="stat-label">AQI</span><span class="stat-value">${Math.round(data.aqi)}</span></div>
+        <div class="stat-mini"><span class="stat-label">Temp.</span><span class="stat-value">${Math.round(data.temp)}°C</span></div>
+        <div class="stat-mini"><span class="stat-label">Humedad</span><span class="stat-value">${Math.round(data.humedad)}%</span></div>
+      </div>` : `<p class="popup-sub">${error ? 'No se pudo obtener datos en vivo.' : 'Cargando…'}</p>`;
+
+    return `
+      <div class="station-card" id="card-${props.id}">
+        <div class="station-card-head">
+          <strong>${props.nombre}</strong>
+          ${statusBadgeHTML(status)}
+        </div>
+        <div class="station-meta">${props.tipo} · ${props.comuna}${data ? ' · actualizado ' + fmtTime(data.hora) : ''}</div>
+        ${statsHTML}
+      </div>`;
+  }
+
+  async function loadStation(feature){
+    const props = feature.properties;
+    const [lon, lat] = feature.geometry.coordinates;
+    const marker = markersById[props.id];
+    try{
+      const data = await fetchStationData(lat, lon);
+      const status = aqiStatus(data.aqi);
+      const statusHex = { good:'#0ca30c', warning:'#fab219', serious:'#ec835a', critical:'#d03b3b', unknown:'#8a8a8a' }[status.cls];
+      marker.setStyle({ fillColor: statusHex });
+      marker.setPopupContent(`
+        <p class="popup-title">${props.nombre}</p>
+        <p class="popup-sub">${props.tipo} · ${props.comuna}</p>
+        <div class="popup-stats">
+          <div>PM2.5: <b>${Math.round(data.pm25)} µg/m³</b></div>
+          <div>AQI: <b>${Math.round(data.aqi)}</b></div>
+          <div>Temp: <b>${Math.round(data.temp)}°C</b></div>
+          <div>Humedad: <b>${Math.round(data.humedad)}%</b></div>
+        </div>
+        ${statusBadgeHTML(status)}
+      `);
+      const card = document.getElementById('card-' + props.id);
+      if(card) card.outerHTML = renderStationCard(props, data, false);
+    }catch(err){
+      const card = document.getElementById('card-' + props.id);
+      if(card) card.outerHTML = renderStationCard(props, null, true);
+    }
+  }
+
+  async function loadAllStations(){
+    stationListEl.innerHTML = STATIONS_GEOJSON.features
+      .map(f => renderStationCard(f.properties, null, false))
+      .join('');
+    await Promise.all(STATIONS_GEOJSON.features.map(loadStation));
+    mapLoading.classList.add('hidden');
+  }
+
+  loadAllStations();
+  setInterval(loadAllStations, REFRESH_MS);
+
+  /* ---------- Filtro de comunas ---------- */
+  const COMUNAS = [
+    { id:1, nombre:'Comuna 1 · Ladera noroccidente', lat:3.4700, lon:-76.5550, stationId:'comuna1' },
+    { id:2, nombre:'Comuna 2 · Norte (Menga / La Flora)', lat:3.4850, lon:-76.5250, stationId:null },
+    { id:3, nombre:'Comuna 3 · Centro (CAM)', lat:3.4548, lon:-76.5326, stationId:'dagma-cam' },
+    { id:6, nombre:'Comuna 6 · Nororiente (Popular)', lat:3.4650, lon:-76.4950, stationId:null },
+    { id:10, nombre:'Comuna 10 · Oriente (Alfonso López)', lat:3.4450, lon:-76.5100, stationId:null },
+    { id:13, nombre:'Comuna 13 · Distrito de Aguablanca', lat:3.4300, lon:-76.4850, stationId:null },
+    { id:17, nombre:'Comuna 17 · Sur (Ciudad 2000)', lat:3.3950, lon:-76.5300, stationId:null },
+    { id:18, nombre:'Comuna 18 · Ladera suroccidente (Meléndez)', lat:3.3745, lon:-76.5480, stationId:'comuna18' },
+    { id:20, nombre:'Comuna 20 · Ladera (Siloé)', lat:3.4350, lon:-76.5550, stationId:null },
+    { id:22, nombre:'Comuna 22 · Sur (Pance / Ciudad Jardín)', lat:3.3705, lon:-76.5330, stationId:'oac22' }
+  ];
+  const DEFAULT_VIEW = { center:[3.4372, -76.5225], zoom:11.3 };
+
+  const comunaSelect = document.getElementById('comuna-select');
+  const comunaStatus = document.getElementById('comuna-status');
+
+  comunaSelect.innerHTML = '<option value="">Todas las comunas (vista general)</option>' +
+    COMUNAS.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+
+  comunaSelect.addEventListener('change', () => {
+    const comuna = COMUNAS.find(c => String(c.id) === comunaSelect.value);
+    if(!comuna){
+      map.flyTo(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom);
+      comunaStatus.textContent = '';
+      comunaStatus.className = 'comuna-status';
+      return;
+    }
+    map.flyTo([comuna.lat, comuna.lon], 14);
+    if(comuna.stationId && markersById[comuna.stationId]){
+      markersById[comuna.stationId].openPopup();
+      comunaStatus.textContent = 'Estación en vivo disponible en esta comuna.';
+      comunaStatus.className = 'comuna-status ok';
+      const card = document.getElementById('card-' + comuna.stationId);
+      if(card){
+        card.scrollIntoView({ behavior:'smooth', block:'nearest' });
+        card.classList.add('highlight');
+        setTimeout(() => card.classList.remove('highlight'), 2000);
+      }
+    }else{
+      comunaStatus.textContent = 'Sin estación de monitoreo instalada en esta comuna todavía.';
+      comunaStatus.className = 'comuna-status missing';
+    }
+  });
+</script>
+
+<script>
+  /**
+   * Panel de información por categoría (sección "Explorar por categoría").
+   * Hover/foco: previsualiza la categoría. Clic: la deja fija (estado "active")
+   * hasta que se elija otra o se recargue la página.
+   */
+  const CATEGORY_INFO = {
+    agua: { label:'Agua', desc:'Calidad hídrica del río Cali, el río Cauca y las quebradas urbanas.', indicators:['Oxígeno disuelto','pH','Turbidez','Coliformes fecales'] },
+    aire: { label:'Aire', desc:'Calidad del aire y emisiones atmosféricas — la misma fuente de datos que alimenta el mapa de estaciones en vivo, más arriba.', indicators:['PM2.5 y PM10','Ozono (O₃)','Dióxido de nitrógeno (NO₂)','Índice AQI'] },
+    ruido: { label:'Ruido', desc:'Niveles de ruido ambiental en zonas residenciales, comerciales e industriales.', indicators:['Nivel sonoro (dB)','Horario diurno / nocturno','Mapa de ruido por comuna'] },
+    flora: { label:'Flora', desc:'Cobertura vegetal urbana y ecosistemas estratégicos, como los Farallones de Cali.', indicators:['Índice de arbolado','Zonas verdes por habitante','Áreas protegidas'] },
+    fauna: { label:'Fauna', desc:'Especies urbanas y silvestres presentes en el municipio.', indicators:['Avistamientos ciudadanos','Especies en riesgo','Corredores biológicos'] },
+    residuos: { label:'Residuos sólidos', desc:'Gestión de residuos: recolección, aprovechamiento y disposición final.', indicators:['Toneladas recolectadas','Puntos de reciclaje','Tasa de aprovechamiento'] }
+  };
+
+  const catCards = document.querySelectorAll('.cat-card');
+  const catInfoTitle = document.getElementById('cat-info-title');
+  const catInfoDesc = document.getElementById('cat-info-desc');
+  const catInfoIndicators = document.getElementById('cat-info-indicators');
+  const catInfoIcon = document.getElementById('cat-info-icon');
+  let selectedCategory = null;
+
+  function renderCategoryInfo(key){
+    const info = CATEGORY_INFO[key];
+    if(!info) return;
+    catInfoTitle.textContent = info.label;
+    catInfoDesc.textContent = info.desc;
+    catInfoIndicators.innerHTML = info.indicators.map(i => `<li>${i}</li>`).join('');
+    const icon = document.querySelector(`.cat-card[data-category="${key}"] .hex svg`);
+    catInfoIcon.innerHTML = icon ? icon.outerHTML : '';
+  }
+
+  function showDefaultCategoryInfo(){
+    catInfoTitle.textContent = 'Explora una categoría';
+    catInfoDesc.textContent = 'Pasa el cursor (o toca, en móvil) sobre un ícono para ver qué mide el Observatorio en esa categoría. Haz clic para dejarla fija.';
+    catInfoIndicators.innerHTML = '';
+    catInfoIcon.innerHTML = '<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="19" stroke="#2E8B77" stroke-width="2.4" stroke-dasharray="4 5"/></svg>';
+  }
+
+  catCards.forEach(card => {
+    const key = card.dataset.category;
+    card.addEventListener('mouseenter', () => renderCategoryInfo(key));
+    card.addEventListener('focus', () => renderCategoryInfo(key));
+    card.addEventListener('mouseleave', () => selectedCategory ? renderCategoryInfo(selectedCategory) : showDefaultCategoryInfo());
+    card.addEventListener('blur', () => selectedCategory ? renderCategoryInfo(selectedCategory) : showDefaultCategoryInfo());
+    card.addEventListener('click', () => {
+      catCards.forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      selectedCategory = key;
+      renderCategoryInfo(key);
+    });
+  });
 </script>
 
 </body>
